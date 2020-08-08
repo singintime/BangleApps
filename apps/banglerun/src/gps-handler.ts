@@ -1,71 +1,58 @@
-import { Grid } from './grid';
-import { Kalman } from './kalman';
+import { GpsData } from './nmea-parser';
 
-const DEG_TO_RAD = Math.PI / 180;
 const EARTH_RADIUS = 6371008.8;
-
-interface GpsData {
-  lat: number;
-  lon: number;
-  alt: number;
-  speed: number,
-  course: number,
-  time: Date,
-  fix: number;
-  satellites: number;
-}
+const POS_ACCURACY = 2.5;
+const VEL_ACCURACY = 0.05;
 
 /** Process GPS data */
 class GpsHandler {
-  public x = new Kalman();
-  public y = new Kalman();
-  public z = new Kalman();
-  public grid = new Grid(10);
+  private _x: number;
+  private _y: number;
+  private _z: number;
+  private _v: number;
+  private _t: number;
+  private _ep: number;
+  private _ev: number;
 
-  public lastUpdated = Date.now();
-  public lastValid = 0;
-  public fix = false;
+  getDistance(data: GpsData) {
+    const x = EARTH_RADIUS * Math.sin(data.lat) * Math.cos(data.lon);
+    const y = EARTH_RADIUS * Math.sin(data.lat) * Math.sin(data.lon);
+    const z = EARTH_RADIUS * Math.cos(data.lat);
+    const v = data.vel;
+    const t = Date.now();
 
-  getDistance(gps: GpsData): ({ t: number, d: number }) {
-    const time = Date.now();
-    const interval = (time - this.lastUpdated) / 1000;
-    this.lastUpdated = time;
-    this.fix = gps.fix > 0;
-
-    if (!this.fix) {
-      return { t: interval, d: 0 };
+    if (this._t === 0) {
+      this._x = x;
+      this._y = y;
+      this._z = z;
+      this._v = v;
+      this._t = t;
+      this._ep = 50;
+      this._ev = 1;
+      return;
     }
 
-    const p = gps.lat * DEG_TO_RAD;
-    const q = gps.lon * DEG_TO_RAD;
+    const dx = x - this._x;
+    const dy = y - this._y;
+    const dz = z - this._z;
+    const dv = v - this._v;
+    const dt = t - this._t;
 
-    const x = EARTH_RADIUS * Math.sin(p) * Math.cos(q);
-    const y = EARTH_RADIUS * Math.sin(p) * Math.sin(q);
-    const z = EARTH_RADIUS * Math.cos(p);
+    const ep = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const ev = Math.sqrt(dv * dv);
 
-    if (!this.lastValid) {
-      this.x.value = x;
-      this.y.value = y;
-      this.z.value = z;
+    this._ep += this._v * dt;
 
-      this.x.error = 100;
-      this.y.error = 100;
-      this.z.error = 100;
+    const gp = this._ep / (this._ep + ep + data.dop * POS_ACCURACY);
+    const gv = this._ev / (this._ev + ev + data.dop * VEL_ACCURACY);
 
-      this.lastValid = time;
+    this._x += (dx - this._x) * gp;
+    this._y += (dy - this._y) * gp;
+    this._z += (dz - this._z) * gp;
+    this._v += (dv - this._v) * gv;
+    this._t = t;
 
-      return { t: interval, d: 0 };
-    }
-
-    this.x.update(x, 10);
-    this.y.update(y, 10);
-    this.z.update(z, 10);
-
-    const distance = this.grid.update(this.x.delta, this.y.delta, this.z.delta);
-
-    this.lastValid = time;
-    
-    return { t: interval, d: distance };
+    return { t: dt, d: ep * gp };
   }
 }
 
