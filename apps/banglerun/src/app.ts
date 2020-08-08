@@ -32,7 +32,6 @@ class BangleRun {
   public views = [
     () => this.drawFirst(),
     () => this.drawSecond(),
-    () => this.drawThird(),
   ];
 
   public viewIndex = 0;
@@ -119,15 +118,6 @@ class BangleRun {
     b.drawString(Math.round(totCadence), 120, 160);
   }
 
-  drawThird(): void {
-    b.setColor(0xFFFF);
-    b.setFontAlign(0, -1, 0);
-    b.setFont('6x8', 2);
-    b.drawString('STEPS', 120, 50);
-    b.setFontVector(40);
-    b.drawString(this.totSteps, 120, 70);
-  }
-
   draw(): void {
     if (!this.drawing) { return; }
     b.clear();
@@ -157,12 +147,6 @@ class BangleRun {
     this.draw();
   }
 
-  handleStep(): void {
-    if (this.running) {
-      this.totSteps += 1;
-    }
-  }
-
   start(): void {
     this.running = !this.running;
     this.draw();
@@ -184,7 +168,7 @@ class BangleRun {
       this.gpsReady = false;
       this.nmeaParser.parse(nmea);
     });
-    Bangle.on('step', () => this.handleStep());
+
     Bangle.on('lcdPower', (on: boolean) => {
       this.drawing = on;
       if (on) {
